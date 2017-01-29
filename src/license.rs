@@ -1,6 +1,9 @@
+use std::borrow::Cow;
 use std::fmt;
-use std::str::FromStr;
 use std::path::PathBuf;
+use std::str::FromStr;
+
+use cargo::{ human, CargoResult };
 use void::Void;
 
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd, Debug)]
@@ -118,6 +121,41 @@ impl License {
 
         Some(false)
     }
+
+    pub fn full_text(&self) -> CargoResult<Cow<'static, str>> {
+        let not_supported = Err(human(format!(" \
+            Bundling license {} is not supported yet. \
+            If you feel like adding support you simply need to add a text file \
+            and update the code to reference it for this license.
+            ", self)));
+        Ok(match *self {
+            License::MIT           => include_str!("licenses/MIT").into(),
+            License::X11           => { return not_supported }
+            License::BSD_3_Clause  => { return not_supported }
+            License::Apache_2_0    => include_str!("licenses/Apache-2.0").into(),
+            License::LGPL_2_0      => { return not_supported }
+            License::LGPL_2_1      => { return not_supported }
+            License::LGPL_2_1Plus  => { return not_supported }
+            License::LGPL_3_0      => { return not_supported }
+            License::LGPL_3_0Plus  => { return not_supported }
+            License::MPL_1_1       => { return not_supported }
+            License::MPL_2_0       => { return not_supported }
+            License::GPL_2_0       => { return not_supported }
+            License::GPL_2_0Plus   => { return not_supported }
+            License::GPL_3_0       => { return not_supported }
+            License::GPL_3_0Plus   => { return not_supported }
+            License::AGPL_1_0      => { return not_supported }
+            License::Custom(_)     => {
+                return Err(human(format!(" \
+                    Bundling license {} is not supported, this is not a known \
+                    OSI license (or my list of licenses is out of date) \
+                    ", self)));
+            }
+            License::File(_)       => { return not_supported }
+            License::Multiple(_)   => { return Err(human("Bundling multiple licenses happens at a higher level")) }
+            License::Unspecified   => { return Err(human("Bundling unspecified license happens at a higher level")) }
+        })
+    }
 }
 
 impl FromStr for License {
@@ -175,14 +213,14 @@ impl fmt::Display for License {
             License::Custom(ref s) => write!(w, "Custom({})", s),
             License::File(ref f)   => write!(w, "File({})", f.to_string_lossy()),
             License::Multiple(ref ls)   => {
-                write!(w, "Any({}", ls[0])?;
-                for l in ls.iter().skip(1) {
-                    write!(w, ", {}", l)?;
+                let mut ls = ls.iter();
+                write!(w, "{}", ls.next().unwrap())?;
+                for l in ls {
+                    write!(w, " OR {}", l)?;
                 }
-                write!(w, ")")
+                Ok(())
             },
             License::Unspecified          => write!(w, "Unlicensed"),
         }
     }
 }
-

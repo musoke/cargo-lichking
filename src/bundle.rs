@@ -2,9 +2,9 @@ use std::io;
 use std::fs::File;
 
 use cargo::core::Package;
-use cargo::{ human, Config, CargoResult };
+use cargo::CargoResult;
 
-use licensed::Licensed;
+use license::License;
 use options::Bundle;
 use util;
 
@@ -12,9 +12,9 @@ pub fn run(root: Package, packages: Vec<Package>, variant: Bundle) -> CargoResul
     match variant {
         Bundle::Inline { file } => {
             if let Some(file) = file {
-                inline(root, packages, File::open(file)?)?;
+                inline(&mut File::create(file)?, root, packages)?;
             } else {
-                inline(root, packages, io::stdout())?;
+                inline(&mut io::stdout(), root, packages)?;
             }
         }
     }
@@ -22,17 +22,38 @@ pub fn run(root: Package, packages: Vec<Package>, variant: Bundle) -> CargoResul
     Ok(())
 }
 
-fn inline<W: io::Write>(root: Package, packages: Vec<Package>, mut out: W) -> CargoResult<()> {
-    let packages_by_license = util::packages_by_license(packages);
-
+fn inline(out: &mut io::Write, root: Package, packages: Vec<Package>) -> CargoResult<()> {
     writeln!(out, "The {} package uses some third party libraries under their own license terms:", root.name())?;
     writeln!(out, "")?;
-    for (license, packages) in packages_by_license {
+
+    for (license, packages) in util::packages_by_license(packages) {
         for package in packages {
             writeln!(out, " * {} - {}", package.name(), license)?;
         }
-        writeln!(out, "    TODO: {} license contents", license)?;
+        match license {
+            License::Multiple(licenses) => {
+                let mut licenses = licenses.into_iter();
+                write_license_text(out, licenses.next().unwrap())?;
+                for license in licenses {
+                    writeln!(out, " ---")?;
+                    write_license_text(out, license)?;
+                }
+            }
+            License::Unspecified => {
+            }
+            license => {
+                write_license_text(out, license)?;
+            }
+        }
         writeln!(out, "")?;
+    }
+
+    Ok(())
+}
+
+fn write_license_text(out: &mut io::Write, license: License) -> CargoResult<()> {
+    for line in license.full_text()?.lines() {
+        writeln!(out, "    {}", line)?;
     }
     Ok(())
 }
