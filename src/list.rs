@@ -1,21 +1,12 @@
-use std::collections::HashMap;
-
 use cargo::core::Package;
 use cargo::{ Config, CargoResult };
 
-use licensed::Licensed;
+use util;
 
 pub fn run(packages: Vec<Package>, config: &Config) -> CargoResult<()> {
-    let mut license_to_packages = HashMap::new();
+    let packages_by_license = util::packages_by_license(packages);
 
-    for package in packages {
-        license_to_packages
-            .entry(package.license())
-            .or_insert_with(Vec::new)
-            .push(package);
-    }
-
-    for (license, packages) in license_to_packages {
+    for (license, packages) in packages_by_license {
         let packages = packages.iter().map(|package| package.name()).collect::<Vec<&str>>().join(", ");
         config.shell().say(format!("{}: {}", license, packages), 0)?;
     }

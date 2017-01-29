@@ -1,8 +1,15 @@
 use clap::{ App, Arg, SubCommand, AppSettings, ArgMatches };
 
+pub enum Bundle {
+    Inline {
+        file: Option<String>,
+    }
+}
+
 pub enum Cmd {
     List,
     Check,
+    Bundle(Bundle),
 }
 
 pub struct Options {
@@ -13,6 +20,32 @@ pub struct Options {
     pub frozen: bool,
     pub locked: bool,
     pub cmd: Cmd,
+}
+
+impl Bundle {
+    pub fn args() -> Vec<Arg<'static, 'static>> {
+        vec![
+            Arg::with_name("variant")
+                .long("variant")
+                .takes_value(true)
+                .possible_value("inline")
+                .default_value("inline")
+                .help("What sort of bundle to produce"),
+            Arg::with_name("file")
+                .long("file")
+                .takes_value(true).value_name("FILE")
+                .help("The file to output to (standard out if not specified)"),
+        ]
+    }
+
+    pub fn from_matches(matches: &ArgMatches) -> Bundle {
+        match matches.value_of("variant").expect("defaulted") {
+            "inline" => Bundle::Inline {
+                file: matches.value_of("file").map(ToOwned::to_owned),
+            },
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl Options {
@@ -83,10 +116,13 @@ impl Options {
                 .about("Check that all dependencies have a compatible license with this crate"),
             SubCommand::with_name("list")
                 .about("List licensing of all dependencies"),
+            SubCommand::with_name("bundle")
+                .about("Bundle all dependencies licenses ready for distribution")
+                .args(&Bundle::args()),
         ]
     }
 
-    pub fn from_matches(matches: ArgMatches) -> Options {
+    pub fn from_matches(matches: &ArgMatches) -> Options {
         let matches = matches.subcommand_matches("lichking").expect("required");
         Options {
             verbose: matches.occurrences_of("verbose") as u32,
@@ -98,6 +134,8 @@ impl Options {
             cmd: match matches.subcommand() {
                 ("check", Some(_)) => Cmd::Check,
                 ("list", Some(_)) => Cmd::List,
+                ("bundle", Some(matches))
+                    => Cmd::Bundle(Bundle::from_matches(matches)),
                 (_, _) => {
                     Options::app(true).get_matches();
                     unreachable!()
